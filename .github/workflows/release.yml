@@ -1,0 +1,47 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]*.[0-9]*.[0-9]*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  deb:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select newest Xcode
+        run: |
+          latest="$(find /Applications -maxdepth 1 -type d -name 'Xcode*.app' -print | sort -V | tail -n1)"
+          sudo xcode-select -s "$latest/Contents/Developer"
+      - name: Install packaging tools
+        run: brew install ldid dpkg
+      - name: Validate and build
+        run: make check && make debs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: claude-debs
+          path: |
+            build/Packages/*.deb
+            build/Packages/SHA256SUMS
+      - name: Create GitHub Release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ./scripts/release-notes.sh "$GITHUB_REF_NAME" >/tmp/claude-release-notes.md
+          gh release create "$GITHUB_REF_NAME" \
+            --title "claude $GITHUB_REF_NAME" \
+            --notes-file /tmp/claude-release-notes.md \
+            build/Packages/*.deb build/Packages/SHA256SUMS || {
+              gh release edit "$GITHUB_REF_NAME" \
+                --title "claude $GITHUB_REF_NAME" \
+                --notes-file /tmp/claude-release-notes.md
+              gh release upload "$GITHUB_REF_NAME" --clobber \
+                build/Packages/*.deb build/Packages/SHA256SUMS
+            }
