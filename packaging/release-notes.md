@@ -23,3 +23,9 @@ The rootless package was tested on-device through `--help`, `doctor`, DNS/TLS/HT
 The repository's packaging code is MIT. The bundled Claude Code executable remains subject to Anthropic's included license and legal terms. Verify downloads with `SHA256SUMS`.
 
 **Packaging changes:** https://github.com/owngoal-dev/claude/commits/@TAG@
+
+This packaging revision updates RootHide compatibility checks and signing.
+CLI startup passes bootstrap paths to payloads that use the physical filesystem;
+RootHide virtual-filesystem utilities retain their official import rewriting.
+RootHide device validation is pending; a successful build is not a claim that
+all interactive runtime paths have been tested.

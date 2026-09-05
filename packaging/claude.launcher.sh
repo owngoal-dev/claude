@@ -1,6 +1,4 @@
-#!/bin/sh
-
-_claude_prefix="@PREFIX@"
+#!@PREFIX@/bin/sh
 
 case "${1:-}" in
 install | update | upgrade)
@@ -8,31 +6,55 @@ install | update | upgrade)
     exit 1
     ;;
 esac
-
 DISABLE_AUTOUPDATER=1
 BUN_JSC_useJIT=false
 export DISABLE_AUTOUPDATER BUN_JSC_useJIT
 
-if [ -n "$_claude_prefix" ]; then
-    PATH="@PREFIX@/usr/bin:@PREFIX@/bin:$PATH"
-    if [ -z "${SHELL:-}" ] || [ ! -x "$SHELL" ]; then
-        for _claude_shell in "@PREFIX@/usr/bin/zsh" "@PREFIX@/usr/bin/bash" "@PREFIX@/usr/bin/sh"; do
-            if [ -x "$_claude_shell" ]; then SHELL="$_claude_shell"; break; fi
-        done
-    fi
-else
-    _claude_usr_bin="$(jbroot /usr/bin)" || exit $?
-    _claude_bin="$(jbroot /bin)" || exit $?
-    PATH="$_claude_usr_bin:$_claude_bin:$PATH"
-    if [ -n "${SHELL:-}" ]; then SHELL="$(jbroot "$SHELL")" || exit $?; fi
-    unset _claude_usr_bin _claude_bin
+# The payload uses libSystem directly. Export physical bootstrap paths so
+# subprocess lookup and TLS work outside the parent's RootHide filesystem view.
+_og_prefix="@PREFIX@"
+if [ -z "$_og_prefix" ]; then
+    _og_prefix="$(jbroot /)" || {
+        echo "claude: cannot resolve RootHide bootstrap with jbroot" >&2
+        exit 127
+    }
+    case "$_og_prefix" in
+        /*) ;;
+        *) echo "claude: jbroot returned an invalid path" >&2; exit 127 ;;
+    esac
+    _og_prefix=${_og_prefix%/}
+fi
+PATH="$_og_prefix/usr/local/bin:$_og_prefix/usr/bin:$_og_prefix/bin:$_og_prefix/usr/sbin:$_og_prefix/sbin${PATH:+:$PATH}"
+
+# Only translate bootstrap shell paths; a physical or custom SHELL stays intact.
+case "${SHELL:-}" in
+    /bin/*|/usr/bin/*) SHELL="$_og_prefix$SHELL" ;;
+esac
+if [ -z "${SHELL:-}" ]; then
+    for _og_shell in /bin/zsh /usr/bin/zsh /bin/bash /usr/bin/bash /bin/sh /usr/bin/sh; do
+        if [ -x "@PREFIX@$_og_shell" ]; then
+            SHELL="$_og_prefix$_og_shell"
+            break
+        fi
+    done
 fi
 export PATH SHELL
-unset _claude_shell
 
-if command -v uiopen >/dev/null 2>&1; then
-    BROWSER="$(command -v uiopen)"
+# Preserve explicit user CA settings. Test in the shell's view, then pass the
+# physical path to the payload (which cannot open RootHide's virtual /etc).
+if [ -z "${SSL_CERT_FILE:-}" ]; then
+    for _og_ca in /etc/ssl/cert.pem /etc/ssl/certs/ca-certificates.crt; do
+        if [ -r "@PREFIX@$_og_ca" ]; then
+            SSL_CERT_FILE="$_og_prefix$_og_ca"
+            export SSL_CERT_FILE
+            break
+        fi
+    done
+fi
+if [ -z "${BROWSER:-}" ] && [ -x "@PREFIX@/usr/bin/uiopen" ]; then
+    BROWSER="$_og_prefix/usr/bin/uiopen"
     export BROWSER
 fi
+unset _og_prefix _og_shell _og_ca
 
 exec @PREFIX@/usr/libexec/claude/claude "$@"

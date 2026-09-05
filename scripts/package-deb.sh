@@ -11,6 +11,11 @@ package_id="${PACKAGE_ID:-wiki.qaq.claude}"
 [[ -x "$payload/claude" && -f "$payload/s.dylib" ]] || { echo "error: incomplete payload" >&2; exit 66; }
 [[ "$architecture" == iphoneos-arm64 || "$architecture" == iphoneos-arm64e ]] || { echo "error: bad architecture" >&2; exit 64; }
 [[ "$prefix" == /var/jb || -z "$prefix" ]] || { echo "error: bad prefix" >&2; exit 64; }
+case "$architecture:$prefix" in
+iphoneos-arm64:/var/jb | iphoneos-arm64e:) ;;
+*) echo "error: architecture and install prefix name different bootstrap layouts" >&2; exit 64 ;;
+esac
+
 for tool in ldid dpkg-deb; do command -v "$tool" >/dev/null || { echo "error: $tool is required" >&2; exit 69; }; done
 
 staging="$(mktemp -d "${TMPDIR:-/tmp}/claude-deb.XXXXXX")"
@@ -32,6 +37,22 @@ sed -e "1s|^#!/bin/sh$|#!$prefix/bin/sh|" -e "s|@PREFIX@|$prefix|g" \
 chmod 0755 "$launcher" "$libexec/claude" "$libexec/s.dylib"
 ldid -S"$root/packaging/claude.entitlements" -Cadhoc "$libexec/claude"
 ldid -S -Cadhoc "$libexec/s.dylib"
+
+# Inspect the signature that ships, not just its source plist.
+ldid -e "$libexec/claude" >"$staging/claude-signed.plist"
+for entitlement in platform-application com.apple.private.security.no-sandbox \
+    com.apple.private.security.storage.AppBundles \
+    com.apple.private.security.storage.AppDataContainers; do
+    [[ "$(/usr/libexec/PlistBuddy -c "Print :$entitlement" "$staging/claude-signed.plist")" == true ]] || {
+        echo "error: signed Claude is missing entitlement: $entitlement" >&2
+        exit 65
+    }
+done
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.private.security.container-required' "$staging/claude-signed.plist")" == false ]] || {
+    echo "error: signed Claude requires a data container" >&2
+    exit 65
+}
+rm -f "$staging/claude-signed.plist"
 
 head -n1 "$launcher" | grep -qxF "#!$prefix/bin/sh"
 grep -qF "exec $prefix/usr/libexec/claude/claude" "$launcher"

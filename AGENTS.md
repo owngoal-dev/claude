@@ -7,3 +7,21 @@
 - JIT is deliberately disabled. The iOS runtime also removes `SharedArrayBuffer`, so keep the fixed-size source compatibility patch and its exact match-count checks together.
 - RootHide processes spawned by this unlinked Mach-O need physical bootstrap paths. Derive them with `jbroot` in the launcher; rootless uses `/var/jb`.
 - Claude's updater must remain disabled because it would replace the patched, signed package payload with a macOS build.
+
+## RootHide signing and launcher checks
+
+RootHide's official Developer README requires both
+`com.apple.private.security.storage.AppBundles` and
+`com.apple.private.security.storage.AppDataContainers`, in addition to the
+platform and no-sandbox entitlements. Keep these in the executable signature
+and verify the extracted signature after packaging; a correct package layout
+alone does not establish access to RootHide's app-container installation path.
+Source: https://github.com/roothide/Developer/blob/main/README.md
+
+For payloads that do not use vroot, the launcher exports physical bootstrap
+PATH, SHELL and default CA/browser paths. Preserve explicit CA/browser settings
+and already physical or custom SHELL paths. Host launcher tests simulate the
+path boundary and verify argv/exit status; they do not prove that iOS loads the
+binary. Test the installed package from both zsh and fish on a RootHide device.
+Do not add vroot to a payload while retaining a launcher that exports physical
+paths: the filesystem view must remain consistent across the boundary.

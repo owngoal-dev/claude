@@ -30,10 +30,11 @@ print-version:
 	@echo "$(VERSION)"
 
 check:
+	@python3 "$(ROOT_DIR)/scripts/check-launcher.py" "$(ROOT_DIR)/packaging/claude.launcher.sh"
 	@for script in scripts/*.sh; do bash -n "$$script" || exit 1; done
 	@node --check scripts/patch-binary.mjs
 	@plutil -lint packaging/claude.entitlements
-	@[[ "$(VERSION)" == "$(UPSTREAM_VERSION)" ]]
+	@version="$(VERSION)"; [[ "$$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?$$ && "$${version%%-*}" == "$(UPSTREAM_VERSION)" ]]
 	@[[ "$(MIN_IOS)" =~ ^[0-9]+\.[0-9]+$$ ]]
 	@./scripts/release-notes.sh "v$(VERSION)" >/dev/null
 	@echo ok
