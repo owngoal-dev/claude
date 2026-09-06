@@ -2,11 +2,12 @@ Package: @PACKAGE_ID@
 Name: Claude Code
 Version: @VERSION@
 Architecture: @ARCHITECTURE@
-Description: Unofficial Claude Code packaging for jailbroken iOS
- Anthropic's Claude Code terminal agent, adapted from its prebuilt Bun
- executable for interpreter-only use on jailbroken iOS. Includes fixed-layout
- rootless and RootHide packages. Upstream payload remains under Anthropic's
- bundled license and legal terms.
+Description: Anthropic's Claude Code, on your device
+ Ask for a change in plain language and Claude reads your files, writes the code
+ and runs the commands to make it happen. Run `claude` in a terminal and sign in
+ with your Claude account or an API key. This is an unofficial packaging of
+ Anthropic's own build; the software inside stays under Anthropic's licence and
+ terms.
 Maintainer: OwnGoal Studio <not-gonna-reply@owngoal.dev>
 Author: Anthropic PBC <https://www.anthropic.com/>
 Homepage: https://github.com/owngoal-dev/claude
