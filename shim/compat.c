@@ -16,6 +16,10 @@ void pthread_jit_write_protect_np(int enabled) {
     (void)enabled;
 }
 
+int pthread_jit_write_protect_supported_np() {
+    return 1;
+}
+
 static void *(*real_dlopen)(const char *, int);
 static pthread_once_t dlopen_once = PTHREAD_ONCE_INIT;
 
