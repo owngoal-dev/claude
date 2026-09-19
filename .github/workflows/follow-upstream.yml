@@ -57,5 +57,10 @@ jobs:
             echo "error: missing release tag does not point at the validated commit" >&2
             exit 1
           fi
+          active="$(gh run list --workflow release.yml --branch "$tag" --json status --jq '[.[] | select(.status != "completed")] | length')"
+          if (( active > 0 )); then
+            echo "Release is already running for $tag"
+            exit 0
+          fi
           # Pushes using GITHUB_TOKEN do not trigger another push workflow.
           gh workflow run release.yml --ref "$tag"
