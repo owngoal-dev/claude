@@ -7,6 +7,14 @@
 - JIT is deliberately disabled. The iOS runtime also removes `SharedArrayBuffer`, so keep the fixed-size source compatibility patch and its exact match-count checks together.
 - RootHide processes spawned by this unlinked Mach-O need physical bootstrap paths. Derive them with `jbroot` in the launcher; rootless uses `/var/jb`.
 - Claude's updater must remain disabled because it would replace the patched, signed package payload with a macOS build.
+- `Follow upstream` checks npm daily and validates both packages in a temporary
+  tree before changing the pin. Keep the reviewed graph and match counts; a
+  mismatch requires inspecting the new binary, never accepting observed counts
+  automatically. The synchronous wait patch tolerates minified identifier
+  renames but still requires the exact zero-valued wait shape and match count.
+- `docs/depiction.json` owns native Details. Pages uses the pinned shared
+  `owngoal-packages` updater to generate Changelog from GitHub Releases, including
+  after successful `Release` workflow completion. Banners are optional for CLIs.
 
 ## RootHide signing and launcher checks
 

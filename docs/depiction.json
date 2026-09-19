@@ -1,0 +1,29 @@
+{
+  "class": "DepictionTabView",
+  "minVersion": "0.4",
+  "tabs": [
+    {
+      "class": "DepictionStackView",
+      "tabname": "Details",
+      "views": [
+        {
+          "class": "DepictionSubheaderView",
+          "title": "Claude Code in Your Terminal",
+          "useBoldText": true
+        },
+        {
+          "class": "DepictionHeaderView",
+          "title": "Description"
+        },
+        {
+          "class": "DepictionSeparatorView"
+        },
+        {
+          "class": "DepictionMarkdownView",
+          "markdown": "Run `claude` in a terminal to ask questions about your code, edit files, and run commands. Sign in with your Claude account or use an API key. This is an unofficial iOS package of Anthropic’s Claude Code.\n\n## Compatibility\n\nRequires iOS 15 or later and a rootless (`iphoneos-arm64`) or RootHide (`iphoneos-arm64e`) bootstrap.\n\nJIT is disabled. File changes are not hot-reloaded, and worker-backed hooks and cross-thread cancellation are unsupported. The rootless build has been device-tested; RootHide still requires device validation.\n\nUpdate through your package manager. Claude’s built-in updater is disabled for this package.\n\n[View Source](https://github.com/owngoal-dev/claude)",
+          "useSpacing": true
+        }
+      ]
+    }
+  ]
+}

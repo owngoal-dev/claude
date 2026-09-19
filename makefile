@@ -33,6 +33,8 @@ check:
 	@python3 "$(ROOT_DIR)/scripts/check-launcher.py" "$(ROOT_DIR)/packaging/claude.launcher.sh"
 	@for script in scripts/*.sh; do bash -n "$$script" || exit 1; done
 	@node --check scripts/patch-binary.mjs
+	@python3 -m json.tool docs/depiction.json >/dev/null
+	@python3 scripts/test-follow-upstream.py
 	@plutil -lint packaging/claude.entitlements
 	@version="$(VERSION)"; [[ "$$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?$$ && "$${version%%-*}" == "$(UPSTREAM_VERSION)" ]]
 	@[[ "$(MIN_IOS)" =~ ^[0-9]+\.[0-9]+$$ ]]

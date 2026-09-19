@@ -10,6 +10,8 @@ Description: Anthropic's Claude Code, on your device
  terms.
 Maintainer: OwnGoal Studio <not-gonna-reply@owngoal.dev>
 Author: Anthropic PBC <https://www.anthropic.com/>
+Depiction: https://owngoal-dev.github.io/claude/
+SileoDepiction: https://owngoal-dev.github.io/claude/depiction.json
 Homepage: https://github.com/owngoal-dev/claude
 Section: Utilities
 Priority: optional

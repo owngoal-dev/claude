@@ -41,5 +41,13 @@ make debs
 
 Artifacts are written to `build/Packages`.
 
+`Follow upstream` checks npm's latest stable release daily at 00:00 UTC and
+can also be run manually. It builds and validates both packages before updating
+the version and integrity pins, then dispatches `Release` on the new tag.
+If the standalone binary layout or expected patch counts change, the update
+stops for review and keeps the previous pin. Run
+`scripts/follow-upstream.sh --check` to check for a newer version without changing files (exit 1 means an
+update is available).
+
 This repository's packaging code is MIT licensed. The downloaded Claude Code
 payload remains subject to Anthropic's bundled license and legal terms.

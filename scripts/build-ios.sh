@@ -17,7 +17,7 @@ mkdir -p "$payload"
 /usr/bin/ditto "$source_dir/claude" "$payload/claude"
 /usr/bin/ditto "$source_dir/LICENSE.md" "$payload/LICENSE.md"
 /usr/bin/ditto "$source_dir/README.md" "$payload/UPSTREAM-README.md"
-shasum -a 256 "$source_dir/claude" >"$payload/UPSTREAM-SHA256"
+(cd "$source_dir" && shasum -a 256 claude) >"$payload/UPSTREAM-SHA256"
 
 node "$root/scripts/patch-binary.mjs" "$payload/claude" "$MIN_IOS" \
     "$EXPECTED_MODULES" "$EXPECTED_BYTECODE_MODULES" \

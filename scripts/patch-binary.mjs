@@ -101,9 +101,9 @@ if (modulesOffset + modulesLength + moduleCount * 4 > byteCount) throw new Error
 
 const replacements = [
   { before: Buffer.from("SharedArrayBuffer"), after: Buffer.from("ArrayBuffer      "), count: 0, expected: expected.sab },
-  { before: Buffer.from("Atomics.wait(ct,0,0,t)"), after: Buffer.from("Bun.sleepSync(t)      "), count: 0, expected: expected.wait },
 ];
 let bytecodeCount = 0;
+let waitCount = 0;
 for (let i = 0; i < moduleCount; i++) {
   const recordAt = graphStart + modulesOffset + i * recordSize;
   const record = read(recordSize, recordAt);
@@ -127,12 +127,25 @@ for (let i = 0; i < moduleCount; i++) {
       at += replacement.before.length;
     }
   }
+  // Minifiers rename both identifiers between releases. Match only the
+  // zero-valued synchronous wait shape and preserve its timeout argument.
+  // latin1 keeps string offsets equal to byte offsets, including UTF-8 source.
+  const source = contents.toString("latin1");
+  const waitPattern = /\bAtomics\.wait\([A-Za-z_$][\w$]*,0,0,([A-Za-z_$][\w$]*)\)/g;
+  for (const match of source.matchAll(waitPattern)) {
+    const replacement = `Bun.sleepSync(${match[1]})`;
+    if (replacement.length > match[0].length) throw new Error("wait replacement does not fit");
+    Buffer.from(replacement.padEnd(match[0].length), "latin1").copy(contents, match.index);
+    waitCount++;
+  }
   if (fs.writeSync(fd, contents, 0, contents.length, graphStart + contentsOffset) !== contents.length)
     throw new Error(`module ${i} source write was short`);
   if (!read(contents.length, graphStart + contentsOffset).equals(contents))
     throw new Error(`module ${i} source readback failed`);
 }
 if (bytecodeCount !== expected.bytecode) throw new Error(`expected ${expected.bytecode} bytecode modules, found ${bytecodeCount}`);
+if (waitCount !== expected.wait)
+  throw new Error(`Atomics.wait: expected ${expected.wait} matches, found ${waitCount}`);
 for (const replacement of replacements) {
   if (replacement.count !== replacement.expected)
     throw new Error(`${replacement.before}: expected ${replacement.expected} matches, found ${replacement.count}`);

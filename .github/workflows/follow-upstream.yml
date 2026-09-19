@@ -1,0 +1,61 @@
+name: Follow upstream
+
+on:
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: follow-upstream
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Select newest Xcode
+        run: |
+          latest="$(find /Applications -maxdepth 1 -type d -name 'Xcode*.app' -print | sort -V | tail -n1)"
+          sudo xcode-select -s "$latest/Contents/Developer"
+      - name: Install packaging tools
+        run: brew install ldid dpkg
+      - name: Validate latest stable release
+        run: ./scripts/follow-upstream.sh
+      - name: Commit validated pin and dispatch Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="$(make --no-print-directory print-version)"
+          tag="v$version"
+          if ! git diff --quiet -- configuration; then
+            if git rev-parse --verify "refs/tags/$tag" >/dev/null 2>&1; then
+              echo "error: $tag already exists; refusing to move it" >&2
+              exit 1
+            fi
+            git config user.name bot
+            git config user.email bot@owngoal.dev
+            git add configuration/upstream.env configuration/version.txt
+            git commit -m "Update Claude Code to $version"
+            git tag "$tag"
+            git push --atomic origin HEAD:main "refs/tags/$tag"
+          fi
+          # Recover a tag whose earlier release dispatch/build failed.
+          if gh release view "$tag" >/dev/null 2>&1; then
+            exit 0
+          fi
+          if [[ "$(git rev-parse "$tag^{commit}")" != "$(git rev-parse HEAD)" ]]; then
+            echo "error: missing release tag does not point at the validated commit" >&2
+            exit 1
+          fi
+          # Pushes using GITHUB_TOKEN do not trigger another push workflow.
+          gh workflow run release.yml --ref "$tag"

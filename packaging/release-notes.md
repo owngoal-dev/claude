@@ -11,21 +11,20 @@ The architecture identifies the bootstrap layout, not the CPU. Check with `dpkg 
 
 Requires iOS @MIN_IOS_MAJOR@ or newer. Run `claude` in a terminal and use `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN`; browser login is opened with `uiopen`.
 
-## First-build limitations
+## Compatibility
 
 - JavaScriptCore JIT is disabled.
 - File-system events are stubbed; settings and external file changes are not hot-reloaded.
 - Worker-backed hooks and cross-thread cancellation are not supported.
 - `claude install`, `claude update`, and automatic updates are disabled; use the package manager.
 
-The rootless package was tested on-device through `--help`, `doctor`, DNS/TLS/HTTP, and the API error path. RootHide uses the established OwnGoal dual-layout packaging but has not yet been exercised on a RootHide device.
+The earlier rootless package was tested on-device through `--help`, `doctor`, DNS/TLS/HTTP, and the API error path. This update is build-verified; device testing of this version and RootHide validation remain pending.
 
 The repository's packaging code is MIT. The bundled Claude Code executable remains subject to Anthropic's included license and legal terms. Verify downloads with `SHA256SUMS`.
 
 **Packaging changes:** https://github.com/owngoal-dev/claude/commits/@TAG@
 
-This packaging revision updates RootHide compatibility checks and signing.
-CLI startup passes bootstrap paths to payloads that use the physical filesystem;
-RootHide virtual-filesystem utilities retain their official import rewriting.
-RootHide device validation is pending; a successful build is not a claim that
-all interactive runtime paths have been tested.
+This revision updates the reviewed standalone binary layout and makes the
+synchronous-wait compatibility patch tolerate minified variable renames. It
+includes the pthread compatibility fix, daily validated upstream checks, and
+native package details with a changelog generated from GitHub Releases.
