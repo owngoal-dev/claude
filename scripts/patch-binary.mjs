@@ -1,19 +1,12 @@
 import fs from "node:fs";
+import { patchSource } from "./patch-source.mjs";
 
-const [path, minimumIOS, expectedModules, expectedBytecode, expectedSAB, expectedWait] = process.argv.slice(2);
-if (!path || !minimumIOS || !expectedWait) {
-  console.error("usage: patch-binary.mjs <binary> <min-ios> <modules> <bytecode> <sab> <wait>");
+const [path, minimumIOS] = process.argv.slice(2);
+if (!path || !minimumIOS) {
+  console.error("usage: patch-binary.mjs <binary> <min-ios>");
   process.exit(64);
 }
 
-const expected = {
-  modules: Number(expectedModules),
-  bytecode: Number(expectedBytecode),
-  sab: Number(expectedSAB),
-  wait: Number(expectedWait),
-};
-if (Object.values(expected).some(value => !Number.isSafeInteger(value) || value < 0))
-  throw new Error("expected counts must be non-negative integers");
 const versionParts = minimumIOS.split(".").map(Number);
 if (versionParts.length !== 2 || versionParts.some(Number.isNaN)) throw new Error("invalid iOS version");
 const encodedMinimum = (versionParts[0] << 16) | (versionParts[1] << 8);
@@ -96,59 +89,37 @@ const recordSize = 52;
 if (byteCount + 48 !== graphLength || modulesLength % recordSize) throw new Error("unknown standalone graph layout");
 if (!(flags & (1 << 5))) throw new Error("standalone graph has no source hashes");
 const moduleCount = modulesLength / recordSize;
-if (moduleCount !== expected.modules) throw new Error(`expected ${expected.modules} modules, found ${moduleCount}`);
+if (!moduleCount) throw new Error("standalone graph has no modules");
 if (modulesOffset + modulesLength + moduleCount * 4 > byteCount) throw new Error("module metadata exceeds graph");
 
-const replacements = [
-  { before: Buffer.from("SharedArrayBuffer"), after: Buffer.from("ArrayBuffer      "), count: 0, expected: expected.sab },
-];
-let bytecodeCount = 0;
-let waitCount = 0;
+const totals = { bytecode: 0, sharedArrayBuffer: 0, wait: 0 };
 for (let i = 0; i < moduleCount; i++) {
   const recordAt = graphStart + modulesOffset + i * recordSize;
   const record = read(recordSize, recordAt);
+  const nameOffset = record.readUInt32LE(0);
+  const nameLength = record.readUInt32LE(4);
   const contentsOffset = record.readUInt32LE(8);
   const contentsLength = record.readUInt32LE(12);
   const bytecodeOffset = record.readUInt32LE(24);
   const bytecodeLength = record.readUInt32LE(28);
+  if (nameOffset + nameLength > byteCount) throw new Error(`module ${i} name exceeds graph`);
   if (contentsOffset + contentsLength > byteCount) throw new Error(`module ${i} source exceeds graph`);
   if (bytecodeLength) {
     if (bytecodeOffset + bytecodeLength > byteCount) throw new Error(`module ${i} bytecode exceeds graph`);
     writeChecked(recordAt + 28, record.subarray(28, 32), Buffer.alloc(4));
-    bytecodeCount++;
+    totals.bytecode++;
   }
   if (!contentsLength) continue;
+  const name = read(nameLength, graphStart + nameOffset).toString();
   const contents = read(contentsLength, graphStart + contentsOffset);
-  for (const replacement of replacements) {
-    let at = 0;
-    while ((at = contents.indexOf(replacement.before, at)) !== -1) {
-      replacement.after.copy(contents, at);
-      replacement.count++;
-      at += replacement.before.length;
-    }
-  }
-  // Minifiers rename both identifiers between releases. Match only the
-  // zero-valued synchronous wait shape and preserve its timeout argument.
-  // latin1 keeps string offsets equal to byte offsets, including UTF-8 source.
-  const source = contents.toString("latin1");
-  const waitPattern = /\bAtomics\.wait\([A-Za-z_$][\w$]*,0,0,([A-Za-z_$][\w$]*)\)/g;
-  for (const match of source.matchAll(waitPattern)) {
-    const replacement = `Bun.sleepSync(${match[1]})`;
-    if (replacement.length > match[0].length) throw new Error("wait replacement does not fit");
-    Buffer.from(replacement.padEnd(match[0].length), "latin1").copy(contents, match.index);
-    waitCount++;
-  }
+  const counts = patchSource(contents, name || `module ${i}`);
+  totals.sharedArrayBuffer += counts.sharedArrayBuffer;
+  totals.wait += counts.wait;
+  if (!counts.sharedArrayBuffer && !counts.wait) continue;
   if (fs.writeSync(fd, contents, 0, contents.length, graphStart + contentsOffset) !== contents.length)
     throw new Error(`module ${i} source write was short`);
   if (!read(contents.length, graphStart + contentsOffset).equals(contents))
     throw new Error(`module ${i} source readback failed`);
-}
-if (bytecodeCount !== expected.bytecode) throw new Error(`expected ${expected.bytecode} bytecode modules, found ${bytecodeCount}`);
-if (waitCount !== expected.wait)
-  throw new Error(`Atomics.wait: expected ${expected.wait} matches, found ${waitCount}`);
-for (const replacement of replacements) {
-  if (replacement.count !== replacement.expected)
-    throw new Error(`${replacement.before}: expected ${replacement.expected} matches, found ${replacement.count}`);
 }
 
 const hashesAt = graphStart + modulesOffset + modulesLength;
@@ -160,4 +131,5 @@ for (let i = 0; i < moduleCount; i++) {
 }
 if (!read(moduleCount * 4, hashesAt).equals(Buffer.alloc(moduleCount * 4))) throw new Error("source hash clear failed");
 fs.closeSync(fd);
-console.log(`patched ${moduleCount} modules; disabled ${bytecodeCount} bytecode entries; SAB=${expected.sab}, wait=${expected.wait}`);
+console.log(`patched ${moduleCount} modules; disabled ${totals.bytecode} bytecode entries; ` +
+  `SharedArrayBuffer=${totals.sharedArrayBuffer}, Atomics.wait=${totals.wait}`);

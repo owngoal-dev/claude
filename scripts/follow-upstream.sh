@@ -52,8 +52,9 @@ path.write_text("\n".join(lines) + "\n")
 (root / "configuration/version.txt").write_text(sys.argv[2] + "\n")
 PY
 
-# Keep the reviewed graph/match counts: a new binary layout requires review.
-# A failed download, patch, signature or package check leaves the pin untouched.
+# The patcher validates the graph layout and rejects source shapes it cannot
+# rewrite. A failed download, patch, signature or package check leaves the
+# pin untouched.
 make -C "$candidate_root" check debs
 cp "$candidate_root/configuration/upstream.env" "$root/configuration/upstream.env"
 cp "$candidate_root/configuration/version.txt" "$root/configuration/version.txt"

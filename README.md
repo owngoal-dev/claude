@@ -44,8 +44,9 @@ Artifacts are written to `build/Packages`.
 `Follow upstream` checks npm's latest stable release daily at 00:00 UTC and
 can also be run manually. It builds and validates both packages before updating
 the version and integrity pins, then dispatches `Release` on the new tag.
-If the standalone binary layout or expected patch counts change, the update
-stops for review and keeps the previous pin. Run
+If the standalone binary layout changes, or the source contains a shape the
+patcher cannot rewrite safely, the update stops for review and keeps the
+previous pin. Run
 `scripts/follow-upstream.sh --check` to check for a newer version without changing files (exit 1 means an
 update is available).
 

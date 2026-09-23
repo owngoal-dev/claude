@@ -19,9 +19,7 @@ mkdir -p "$payload"
 /usr/bin/ditto "$source_dir/README.md" "$payload/UPSTREAM-README.md"
 (cd "$source_dir" && shasum -a 256 claude) >"$payload/UPSTREAM-SHA256"
 
-node "$root/scripts/patch-binary.mjs" "$payload/claude" "$MIN_IOS" \
-    "$EXPECTED_MODULES" "$EXPECTED_BYTECODE_MODULES" \
-    "$EXPECTED_SHARED_ARRAY_BUFFER" "$EXPECTED_ATOMICS_WAIT"
+node "$root/scripts/patch-binary.mjs" "$payload/claude" "$MIN_IOS"
 
 sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
 xcrun clang -target "arm64-apple-ios$MIN_IOS" -isysroot "$sdk" -dynamiclib \

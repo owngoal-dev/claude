@@ -22,7 +22,7 @@ class FollowUpstreamTests(unittest.TestCase):
         self.version = self.root / "configuration/version.txt"
         self.config.write_text(
             "UPSTREAM_PACKAGE=@example/cli\nUPSTREAM_VERSION=1.2.3\n"
-            "UPSTREAM_INTEGRITY=reviewed\nEXPECTED_MODULES=123\n"
+            "UPSTREAM_INTEGRITY=reviewed\nMIN_IOS=15.0\n"
         )
         self.version.write_text("1.2.3-2\n")
         self.original = self.config.read_bytes(), self.version.read_bytes()
@@ -52,11 +52,14 @@ class FollowUpstreamTests(unittest.TestCase):
     def assert_unchanged(self):
         self.assertEqual(self.original, (self.config.read_bytes(), self.version.read_bytes()))
 
-    def test_success_keeps_reviewed_counts(self):
+    def test_success_changes_only_version_pins(self):
         result = self.run_update()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.version.read_text(), "1.2.4\n")
-        self.assertIn("EXPECTED_MODULES=123\n", self.config.read_text())
+        self.assertEqual(self.config.read_text(), (
+            "UPSTREAM_PACKAGE=@example/cli\nUPSTREAM_VERSION=1.2.4\n"
+            "UPSTREAM_INTEGRITY=sha512-" + "A" * 86 + "==\nMIN_IOS=15.0\n"
+        ))
 
     def test_build_failure_preserves_both_pins(self):
         self.assertNotEqual(self.run_update(build_exit=65).returncode, 0)
