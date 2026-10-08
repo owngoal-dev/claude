@@ -1,4 +1,4 @@
-Unofficial packaging of [Claude Code](https://code.claude.com/docs/en/overview) @VERSION@ for jailbroken iOS.
+Unofficial packaging of [Claude Code](https://code.claude.com/docs/en/overview) @VERSION@ for iOS on custom firmware.
 
 ## Download
 

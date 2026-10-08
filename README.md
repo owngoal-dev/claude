@@ -1,7 +1,7 @@
 # claude
 
 Unofficial packaging of [Claude Code](https://code.claude.com/docs/en/overview)
-for jailbroken iOS. One patched arm64 executable is packaged for rootless and
+for iOS on custom firmware. One patched arm64 executable is packaged for rootless and
 RootHide bootstraps.
 
 ## Install
