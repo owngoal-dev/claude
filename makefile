@@ -22,14 +22,17 @@ endif
 
 DEB := $(PKG_DIR)/$(PACKAGE_ID)_$(VERSION)_$(PACKAGE_ARCH).deb
 
-.PHONY: all check fetch build package deb debs deb-rootless deb-roothide checksums clean print-version
+.PHONY: all tooling check fetch build package deb debs deb-rootless deb-roothide checksums clean print-version
 
 all: debs
 
 print-version:
 	@echo "$(VERSION)"
 
-check:
+tooling:
+	@npm ci --ignore-scripts --no-audit --no-fund
+
+check: tooling
 	@python3 "$(ROOT_DIR)/scripts/check-launcher.py" "$(ROOT_DIR)/packaging/claude.launcher.sh"
 	@for script in scripts/*.sh; do bash -n "$$script" || exit 1; done
 	@node --check scripts/patch-binary.mjs
@@ -45,7 +48,7 @@ check:
 fetch:
 	@./scripts/fetch-upstream.sh
 
-build: fetch
+build: tooling fetch
 	@./scripts/build-ios.sh
 
 package:

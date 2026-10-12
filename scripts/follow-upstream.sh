@@ -34,7 +34,7 @@ fi
 
 candidate_root="$(mktemp -d "${TMPDIR:-/tmp}/claude-upstream.XXXXXX")"
 trap 'rm -rf -- "$candidate_root"' EXIT
-cp -R "$root/configuration" "$root/scripts" "$root/packaging" "$root/shim" "$root/docs" "$root/makefile" "$candidate_root/"
+cp -R "$root/configuration" "$root/scripts" "$root/packaging" "$root/shim" "$root/docs" "$root/makefile" "$root/package.json" "$root/package-lock.json" "$candidate_root/"
 python3 - "$candidate_root" "$version" "$integrity" <<'PY'
 from pathlib import Path
 import sys

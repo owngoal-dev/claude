@@ -24,6 +24,26 @@ if [ -z "$_og_prefix" ]; then
     esac
     _og_prefix=${_og_prefix%/}
 fi
+
+# Credentials belong to this bootstrap, never the macOS keychain. The package
+# provides a sticky parent; each invoking user owns a private child directory.
+_og_uid="$(id -u)" || exit 1
+case "$_og_uid" in ''|*[!0-9]*) echo "claude: invalid user id" >&2; exit 1 ;; esac
+CLAUDE_SECURESTORAGE_CONFIG_DIR="$_og_prefix/var/lib/claude/$_og_uid"
+if [ -L "$CLAUDE_SECURESTORAGE_CONFIG_DIR" ]; then
+    echo "claude: credential directory must not be a symlink" >&2
+    exit 1
+fi
+if [ ! -d "$CLAUDE_SECURESTORAGE_CONFIG_DIR" ]; then
+    mkdir -m 700 "$CLAUDE_SECURESTORAGE_CONFIG_DIR" || exit 1
+fi
+if [ ! -O "$CLAUDE_SECURESTORAGE_CONFIG_DIR" ]; then
+    echo "claude: credential directory belongs to another user" >&2
+    exit 1
+fi
+chmod 700 "$CLAUDE_SECURESTORAGE_CONFIG_DIR" || exit 1
+export CLAUDE_SECURESTORAGE_CONFIG_DIR
+
 PATH="$_og_prefix/usr/local/bin:$_og_prefix/usr/bin:$_og_prefix/bin:$_og_prefix/usr/sbin:$_og_prefix/sbin${PATH:+:$PATH}"
 
 # Only translate bootstrap shell paths; a physical or custom SHELL stays intact.
@@ -55,6 +75,6 @@ if [ -z "${BROWSER:-}" ] && [ -x "@PREFIX@/usr/bin/uiopen" ]; then
     BROWSER="$_og_prefix/usr/bin/uiopen"
     export BROWSER
 fi
-unset _og_prefix _og_shell _og_ca
+unset _og_prefix _og_shell _og_ca _og_uid
 
 exec @PREFIX@/usr/libexec/claude/claude "$@"

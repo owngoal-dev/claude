@@ -1,0 +1,8 @@
+{
+  "name": "claude-ios-packaging",
+  "private": true,
+  "license": "MIT",
+  "devDependencies": {
+    "acorn": "8.15.0"
+  }
+}

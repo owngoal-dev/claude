@@ -7,6 +7,15 @@
 - JIT is deliberately disabled. The iOS runtime also removes `SharedArrayBuffer`, so `scripts/patch-source.mjs` renames every whole `SharedArrayBuffer` token to a padded `ArrayBuffer` and rewrites every `Atomics.wait` call. It fails on a declaration or assignment of `SharedArrayBuffer` and on any wait call that is not the zero-valued sleep shape. Extend its rules and `scripts/test-patch-source.mjs` together; never loosen a rejection to make a release pass.
 - RootHide processes spawned by this unlinked Mach-O need physical bootstrap paths. Derive them with `jbroot` in the launcher; rootless uses `/var/jb`.
 - Claude's updater must remain disabled because it would replace the patched, signed package payload with a macOS build.
+- macOS keychain access stays disabled. `scripts/patch-credentials.mjs` selects
+  file storage for OAuth, API keys and device keys and guards residual security
+  commands. Keep filesystem read options forwarded: the upstream facade drops
+  `flag`, which would defeat `O_NOFOLLOW`. Credentials live in the launcher's
+  physical bootstrap `var/lib/claude/<uid>` directory, with modes 0700/0600.
+  Do not globally spoof Linux: the Darwin build's credential selectors are
+  already compiled unconditionally, while other platform decisions still vary.
+  Host smoke tests use only the repository download and disposable files;
+  never run an installed Claude or read its existing login to validate a patch.
 - `Follow upstream` checks npm daily and validates both packages in a temporary
   tree before changing the pin. A patch failure keeps the previous pin and
   requires inspecting the new binary. The synchronous wait patch tolerates

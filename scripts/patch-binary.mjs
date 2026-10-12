@@ -1,9 +1,12 @@
 import fs from "node:fs";
 import { patchSource } from "./patch-source.mjs";
+import { credentialContext, patchCredentials } from "./patch-credentials.mjs";
 
-const [path, minimumIOS] = process.argv.slice(2);
+const [path, minimumIOS, mode] = process.argv.slice(2);
+if (mode && mode !== "--macos-smoke") throw Error("unknown patch mode");
+const macosSmoke = mode === "--macos-smoke";
 if (!path || !minimumIOS) {
-  console.error("usage: patch-binary.mjs <binary> <min-ios>");
+  console.error("usage: patch-binary.mjs <binary> <min-ios> [--macos-smoke]");
   process.exit(64);
 }
 
@@ -44,7 +47,7 @@ for (let i = 0; i < header.readUInt32LE(16); i++) {
     const changed = Buffer.from(command);
     changed.writeUInt32LE(2, 8);
     changed.writeUInt32LE(encodedMinimum, 12);
-    writeChecked(commandOffset, command, changed);
+    if (!macosSmoke) writeChecked(commandOffset, command, changed);
     buildVersions++;
   }
   if (commandID === 0xc) {
@@ -57,7 +60,7 @@ for (let i = 0; i < header.readUInt32LE(16); i++) {
       if (replacement.length > commandSize - nameOffset) throw new Error("shim path does not fit load command");
       changed.fill(0, nameOffset);
       replacement.copy(changed, nameOffset);
-      writeChecked(commandOffset, command, changed);
+      if (!macosSmoke) writeChecked(commandOffset, command, changed);
       systemLibraries++;
     }
   }
@@ -92,7 +95,15 @@ const moduleCount = modulesLength / recordSize;
 if (!moduleCount) throw new Error("standalone graph has no modules");
 if (modulesOffset + modulesLength + moduleCount * 4 > byteCount) throw new Error("module metadata exceeds graph");
 
-const totals = { bytecode: 0, sharedArrayBuffer: 0, wait: 0 };
+const modules = [];
+for (let i = 0; i < moduleCount; i++) {
+  const record = read(recordSize, graphStart + modulesOffset + i * recordSize);
+  const [no, nl, so, sl] = [0, 4, 8, 12].map((at) => record.readUInt32LE(at));
+  if (no + nl > byteCount || so + sl > byteCount) throw Error(`module ${i} exceeds graph`);
+  modules.push({ name: read(nl, graphStart + no).toString(), contents: read(sl, graphStart + so) });
+}
+const credentials = credentialContext(modules);
+const totals = { bytecode: 0, sharedArrayBuffer: 0, wait: 0, credentials: 0 };
 for (let i = 0; i < moduleCount; i++) {
   const recordAt = graphStart + modulesOffset + i * recordSize;
   const record = read(recordSize, recordAt);
@@ -113,9 +124,11 @@ for (let i = 0; i < moduleCount; i++) {
   const name = read(nameLength, graphStart + nameOffset).toString();
   const contents = read(contentsLength, graphStart + contentsOffset);
   const counts = patchSource(contents, name || `module ${i}`);
+  const credentialEdits = patchCredentials(contents, name, credentials);
+  totals.credentials += credentialEdits;
   totals.sharedArrayBuffer += counts.sharedArrayBuffer;
   totals.wait += counts.wait;
-  if (!counts.sharedArrayBuffer && !counts.wait) continue;
+  if (!counts.sharedArrayBuffer && !counts.wait && !credentialEdits) continue;
   if (fs.writeSync(fd, contents, 0, contents.length, graphStart + contentsOffset) !== contents.length)
     throw new Error(`module ${i} source write was short`);
   if (!read(contents.length, graphStart + contentsOffset).equals(contents))
@@ -132,4 +145,4 @@ for (let i = 0; i < moduleCount; i++) {
 if (!read(moduleCount * 4, hashesAt).equals(Buffer.alloc(moduleCount * 4))) throw new Error("source hash clear failed");
 fs.closeSync(fd);
 console.log(`patched ${moduleCount} modules; disabled ${totals.bytecode} bytecode entries; ` +
-  `SharedArrayBuffer=${totals.sharedArrayBuffer}, Atomics.wait=${totals.wait}`);
+  `SharedArrayBuffer=${totals.sharedArrayBuffer}, Atomics.wait=${totals.wait}, credentials=${totals.credentials}`);

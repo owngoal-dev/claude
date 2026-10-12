@@ -21,7 +21,7 @@ def check(template):
         bootstrap = work / 'bootstrap with spaces'
         commands = work / 'commands'
         commands.mkdir()
-        for directory in ['bin', 'usr/bin', 'etc/ssl']:
+        for directory in ['bin', 'usr/bin', 'etc/ssl', 'var/lib/claude']:
             (bootstrap / directory).mkdir(parents=True)
         for binary in ['bin/sh', 'bin/zsh', 'usr/bin/uiopen']:
             (bootstrap / binary).symlink_to('/bin/sh')
@@ -78,7 +78,21 @@ def check(template):
                     if program == 'claude':
                         assert exported['DISABLE_AUTOUPDATER'] == '1'
                         assert exported['BUN_JSC_useJIT'] == 'false'
+                        credentials = bootstrap / 'var/lib/claude' / str(os.getuid())
+                        assert exported['CLAUDE_SECURESTORAGE_CONFIG_DIR'] == str(credentials)
+                        assert credentials.stat().st_mode & 0o777 == 0o700
                     cases += 1
+            if program == 'claude':
+                credentials = bootstrap / 'var/lib/claude' / str(os.getuid())
+                credentials.rmdir()
+                credentials.symlink_to(work)
+                result = subprocess.run(['/bin/sh', str(launcher), '--version'],
+                                        env={'PATH': str(commands) + ':/usr/bin:/bin',
+                                             'TEST_BOOTSTRAP': str(bootstrap)},
+                                        capture_output=True, text=True)
+                assert result.returncode == 1 and 'symlink' in result.stderr and not result.stdout
+                credentials.unlink()
+                cases += 1
             if flavor == 'roothide':
                 for failure in [{'TEST_JBROOT_FAIL': '1'}, {'TEST_BOOTSTRAP': ''}, {'TEST_BOOTSTRAP': 'relative'}]:
                     env = {'PATH': str(commands) + ':/usr/bin:/bin', 'TEST_BOOTSTRAP': str(bootstrap), **failure}

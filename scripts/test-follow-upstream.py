@@ -17,7 +17,8 @@ class FollowUpstreamTests(unittest.TestCase):
         source = Path(__file__).resolve().parents[1]
         for name in ("configuration", "scripts", "packaging", "shim", "docs"):
             shutil.copytree(source / name, self.root / name)
-        shutil.copy(source / "makefile", self.root)
+        for name in ("makefile", "package.json", "package-lock.json"):
+            shutil.copy(source / name, self.root)
         self.config = self.root / "configuration/upstream.env"
         self.version = self.root / "configuration/version.txt"
         self.config.write_text(
@@ -30,7 +31,7 @@ class FollowUpstreamTests(unittest.TestCase):
         mock_bin.mkdir()
         commands = {
             "npm": '#!/bin/bash\nprintf "%s\\n" "$TEST_METADATA"\n',
-            "make": '#!/bin/bash\n[[ -f "$2/docs/depiction.json" ]] || exit 90\nexit "$TEST_BUILD_EXIT"\n',
+            "make": '#!/bin/bash\n[[ -f "$2/docs/depiction.json" && -f "$2/package-lock.json" ]] || exit 90\nexit "$TEST_BUILD_EXIT"\n',
         }
         for name, contents in commands.items():
             path = mock_bin / name

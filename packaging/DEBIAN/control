@@ -15,5 +15,5 @@ SileoDepiction: https://owngoal-dev.github.io/claude/depiction.json
 Homepage: https://github.com/owngoal-dev/claude
 Section: Utilities
 Priority: optional
-Depends: firmware (>= @MIN_IOS@), uikittools
+Depends: firmware (>= @MIN_IOS@), uikittools, coreutils
 Installed-Size: @INSTALLED_SIZE@
