@@ -7,6 +7,7 @@ source "$root/configuration/upstream.env"
 version="$(tr -d '[:space:]' <"$root/configuration/version.txt")"
 sed \
     -e "s|@VERSION@|$version|g" \
+    -e "s|@UPSTREAM_VERSION@|$UPSTREAM_VERSION|g" \
     -e "s|@TAG@|$1|g" \
     -e "s|@MIN_IOS_MAJOR@|${MIN_IOS%%.*}|g" \
     "$root/packaging/release-notes.md"
