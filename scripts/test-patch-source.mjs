@@ -80,6 +80,45 @@ test('filesystem facade forwards credential no-follow flags', async () => {
   assert.equal(await io.readFile('/fixture', options), options);
 });
 
+test('device key path follows the credential directory or its null guard', () => {
+  const modules = credentialFixture();
+  modules[0].contents = Buffer.from(modules[0].contents.toString() + 'function guard(){return diskless()?null:dir()}');
+  const context = credentialContext(modules);
+  assert.deepEqual(context.directories, ['dir', 'guard']);
+  for (const [imported, value, expected] of [
+    ['dir', '/fixture', '/fixture/.device-keys.json'],
+    ['guard', '/fixture', '/fixture/.device-keys.json'],
+    ['guard', null, '/home/.claude/.device-keys.json'],
+  ]) {
+    const source = Buffer.from(`import{${imported}}from"/dir.js";var c=".credentials.json",k=".device-keys.json";` +
+      'function keys(){return join(home(),".claude",k).normalize("NFC")}');
+    const length = source.length;
+    assert.equal(patchCredentials(source, '/keys.js', context), 1);
+    assert.equal(source.length, length);
+    const sandbox = { [imported]: () => value, home: () => '/home', join: (...x) => x.join('/') };
+    assert.equal(vm.runInNewContext(source.toString().replace(/^import\{[^}]*\}from"[^"]*";/, '') + ';keys()', sandbox), expected);
+  }
+  const other = Buffer.from('import{other}from"/dir.js";var c=".credentials.json",k=".device-keys.json";' +
+    'function keys(){return join(home(),".claude",k).normalize("NFC")}');
+  assert.throws(() => patchCredentials(other, '/keys.js', context), /device credential directory import/);
+});
+
+test('device key selector picks the file backend past any guards', () => {
+  const context = credentialContext(credentialFixture());
+  for (const guards of ['if(override)return override;', 'if(override)return override;if(diskless())return memory;']) {
+    const source = Buffer.from(
+      'function kc(e){return{name:"keychain",read(){return run("security",["find-generic-password"])}}}' +
+      'function file(e){return{name:"file",async read(){try{return await io().readFile(e(),{encoding:"utf8"})}' +
+      'catch(a){log(`[deviceKeyStore] file read failed: ${a}`);return null}}}}' +
+      `var keys=kc(where),disk=file(where);function pick(){${guards}return keys}`);
+    assert.ok(patchCredentials(source, '/device.js', context));
+    const sandbox = { where: () => '/fixture', override: null, memory: {}, diskless: () => true, log() {},
+      run: () => assert.fail('security was invoked'), io: () => ({ readFile: async (_p, o) => o }) };
+    const store = vm.runInNewContext(source.toString() + ';pick()', sandbox);
+    assert.equal(store.name, 'file');
+  }
+});
+
 function patch(text) {
   const contents = Buffer.from(text);
   const counts = patchSource(contents, "test.js");
@@ -124,6 +163,13 @@ test("rewrites zero-valued Atomics.wait to a sleep of the same length", () => {
     `function q(){${"Bun.sleepSync(50)".padEnd(second.length)}}`);
 });
 
+test("rewrites a zero-valued wait on a fresh buffer", () => {
+  const wait = "Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,e)";
+  const { text, counts } = patch(`var x={sleep(e){${wait}}};`);
+  assert.equal(counts.wait, 1);
+  assert.equal(text, `var x={sleep(e){${"Bun.sleepSync(e)".padEnd(wait.length)}}};`);
+});
+
 test("rejects every other Atomics.wait call", () => {
   for (const source of [
     "Atomics.wait(a,0,1,e)",
@@ -132,6 +178,9 @@ test("rejects every other Atomics.wait call", () => {
     "Atomics.wait(a,0,0,e.timeout)",
     'Atomics["wait"](a,0,0,e)',
     "Atomics . wait(a,0,0,e)",
+    "Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,1,e)",
+    "Atomics.wait(new Int32Array(shared),0,0,e)",
+    "Atomics.wait(new Int32Array(new SharedArrayBuffer(n)),0,0,e)",
   ])
     assert.throws(() => patch(source), /unsupported Atomics\.wait/, source);
   const other = 'Atomics.waitAsync(a,0,0,e);Atomics.store(a,0,1);MyAtomics.wait(a);"Atomics.wait";';

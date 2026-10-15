@@ -19,7 +19,12 @@
 - `Follow upstream` checks npm daily and validates both packages in a temporary
   tree before changing the pin. A patch failure keeps the previous pin and
   requires inspecting the new binary. The synchronous wait patch tolerates
-  minified identifier renames but still requires the zero-valued wait shape.
+  minified identifier renames and a fresh `new Int32Array(new
+  SharedArrayBuffer(n))` buffer but still requires the zero-valued wait shape.
+  Credential discovery is structural for the same reason: 2.1.300 imported a
+  null-returning `diskless()?null:dir()` guard instead of the directory, and
+  added a diskless guard before the device-key keychain default. Prefer
+  matching a role (guards then the keychain return) over a fixed body.
 - `docs/depiction.json` owns native Details. Pages uses the pinned shared
   `owngoal-packages` updater to generate Changelog from GitHub Releases, including
   after successful `Release` workflow completion. Banners are optional for CLIs.

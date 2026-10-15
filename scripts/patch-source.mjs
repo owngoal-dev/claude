@@ -16,8 +16,10 @@ const assignmentAfter = /^\s*=(?![=>])/;
 const waitCall = /(?<![\w$\x80-\xff])Atomics\s*(?:\.\s*wait|\[\s*(["'`])wait\1\s*\])\s*\(/g;
 // Only the zero-valued sleep helper is rewritten: without shared memory
 // nothing can notify it, so it blocks until the timeout. Minifiers rename
-// both identifiers between releases.
-const zeroWait = /^Atomics\.wait\(\s*[A-Za-z_$][\w$]*\s*,\s*0\s*,\s*0\s*,\s*([A-Za-z_$][\w$]*|\d+)\s*\)/;
+// both identifiers between releases. The buffer is either a named one or a
+// fresh `new Int32Array(new SharedArrayBuffer(n))` that nothing else can see.
+const freshBuffer = String.raw`new\s+Int32Array\(\s*new\s+SharedArrayBuffer\(\s*\d+\s*\)\s*\)`;
+const zeroWait = new RegExp(String.raw`^Atomics\.wait\(\s*(?:[A-Za-z_$][\w$]*|${freshBuffer})\s*,\s*0\s*,\s*0\s*,\s*([A-Za-z_$][\w$]*|\d+)\s*\)`);
 
 function context(source, index, length) {
   return JSON.stringify(source.slice(Math.max(0, index - 60), index + length + 60));

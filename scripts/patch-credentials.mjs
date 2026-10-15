@@ -46,12 +46,23 @@ export function credentialContext(modules) {
       text(source, n.body).includes('.normalize("NFC")')).map((directory) => ({ module, directory }));
   });
   const { module: directoryModule, directory } = one(directories, 'credential directory');
+  // Callers may import the directory itself or a guard around it that
+  // returns null (2.1.300: `diskless()?null:directory()`).
+  const directorySource = directoryModule.contents.toString('latin1');
+  const guards = nodes(ast(directorySource), (n) => n.type === 'FunctionDeclaration' && n.params.length === 0 &&
+    n.body.body.length === 1 && n.body.body[0].type === 'ReturnStatement' &&
+    n.body.body[0].argument?.type === 'ConditionalExpression' &&
+    n.body.body[0].argument.consequent.type === 'Literal' && n.body.body[0].argument.consequent.value === null &&
+    n.body.body[0].argument.alternate.type === 'CallExpression' &&
+    n.body.body[0].argument.alternate.arguments.length === 0 &&
+    n.body.body[0].argument.alternate.callee.name === directory.id.name).map((n) => n.id.name);
   const syncCall = one(nodes(tree, (n) => n.type === 'CallExpression' && n.callee.property?.name === 'readFileSync'), 'credential sync I/O');
   const io = syncCall.callee.object.callee.name;
   const ioImport = one(tree.body.filter((n) => n.type === 'ImportDeclaration' &&
     n.specifiers.some((s) => s.local.name === io)), 'credential I/O import');
   return { module: module.name, selector: selector.id.name, plain,
-    directoryModule: directoryModule.name, directory: directory.id.name, ioModule: ioImport.source.value };
+    directoryModule: directoryModule.name, directory: directory.id.name,
+    directories: [directory.id.name, ...guards], ioModule: ioImport.source.value };
 }
 
 export function patchCredentials(contents, name, context) {
@@ -123,7 +134,15 @@ export function patchCredentials(contents, name, context) {
     const init = one(nodes(tree, (n) => n.type === "VariableDeclarator" &&
       n.init?.type === "CallExpression" && functions.some((fn) => fn.id.name === n.init.callee.name &&
         text(source, fn.body).includes('name:"file"'))), "device file backend");
-    const selector = one(functions.filter((fn) => /^\{if\([\w$]+\)return [\w$]+;return [\w$]+\}$/.test(text(source, fn.body))), "device selector");
+    const keychain = one(nodes(tree, (n) => n.type === "VariableDeclarator" &&
+      n.init?.type === "CallExpression" && functions.some((fn) => fn.id.name === n.init.callee.name &&
+        text(source, fn.body).includes('name:"keychain"'))), "device keychain backend");
+    // The guards before the keychain default vary by release (2.1.300 adds a
+    // diskless backend); the selector only guards and then returns it.
+    const selector = one(functions.filter((fn) => fn.params.length === 0 && fn.body.body.length >= 2 &&
+      fn.body.body.at(-1).type === 'ReturnStatement' && fn.body.body.at(-1).argument?.name === keychain.id.name &&
+      fn.body.body.slice(0, -1).every((n) => n.type === 'IfStatement' && !n.alternate &&
+        n.consequent.type === 'ReturnStatement' && n.consequent.argument?.type === 'Identifier')), "device selector");
     body(selector, `return ${init.id.name};`);
     const factory = one(functions.filter((fn) => fn.id.name === init.init.callee.name), 'device file factory');
     const read = one(nodes(factory, (n) => n.type === 'Property' && n.key.name === 'read'), 'device file reader').value.body;
@@ -136,10 +155,11 @@ export function patchCredentials(contents, name, context) {
   }
   if (source.includes('".device-keys.json"') && source.includes('".credentials.json"')) {
     const path = one(functions.filter((fn) => /return [\w$]+\([\w$]+\(\),"\.claude",[\w$]+\)\.normalize\("NFC"\)/.test(text(source, fn.body))), "device path");
-    const match = /return ([\w$]+)\([\w$]+\(\),"\.claude",([\w$]+)\)/.exec(text(source, path.body));
+    const [, join, home, file] = /return ([\w$]+)\(([\w$]+)\(\),"\.claude",([\w$]+)\)/.exec(text(source, path.body));
     const imports = tree.body.filter((n) => n.type === "ImportDeclaration" && n.source.value === context.directoryModule);
-    const directory = one(imports.flatMap((n) => n.specifiers).filter((s) => s.imported?.name === context.directory), "device credential directory import").local.name;
-    body(path, `return ${match[1]}(${directory}(),${match[2]});`);
+    const directory = one(imports.flatMap((n) => n.specifiers).filter((s) => context.directories.includes(s.imported?.name)), "device credential directory import").local.name;
+    // A guard's null keeps upstream's own ~/.claude location.
+    body(path, `return ${join}(${directory}()??${home}()+"/.claude",${file});`);
   }
 
   const apiReads = functions.filter((fn) => text(source, fn.body).includes('Failed to read API key from macOS keychain:'));
