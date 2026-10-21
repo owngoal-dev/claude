@@ -44,11 +44,16 @@ A global spoof would also change unrelated platform decisions and may select
 Linux `/proc` paths or Linux tools. The patch therefore switches the credential
 backends explicitly and rejects unrecognised source shapes on upgrade.
 
-The rootless build is device-tested through `--help`, `doctor`, and the complete
-API request path. RootHide uses the same binary and the layout used by the
-other OwnGoal CLI packages, but still requires validation on a RootHide device.
-The file credential patch requires fresh device validation of login, token
-refresh, and logout; host tests do not establish iOS runtime compatibility.
+The rootless build was previously device-tested through `--help`, `doctor`, and
+the complete API request path. The current RootHide build is smoke-tested in
+vphone guests on iOS 26.6.2 and 27.0.1, as root and mobile, from zsh and fish.
+Tests cover version/help, doctor, the updater guard, credential directory modes,
+and a complete streaming request to a local mock API. The native command
+entrypoint explicitly starts the shell setup script because iOS can silently
+fail a direct shebang launch from fish.
+
+Real-account login, token refresh, and logout still require device validation;
+the credential method tests use disposable files and fixture tokens.
 
 ## Build
 
