@@ -170,6 +170,47 @@ test("rewrites a zero-valued wait on a fresh buffer", () => {
   assert.equal(text, `var x={sleep(e){${"Bun.sleepSync(e)".padEnd(wait.length)}}};`);
 });
 
+function threadedWriterFixture() {
+  return 'var io={writeOnAThread(fd,done){' +
+    'let shared=new Int32Array(new SharedArrayBuffer(16));' +
+    'let worker=new Worker("fixture");worker.onmessage=done;' +
+    'return{write:(bytes,offset)=>{' +
+    'if(worker===void 0)throw Object.assign(Error("the thread could not be started"),{code:"NO_THREAD"});' +
+    'worker.postMessage(bytes.slice(offset));' +
+    'throw Object.assign(Error("the thread has the bytes"),{code:"EINPROGRESS"})},' +
+    'wait(timeout){Atomics.wait(shared,0,pending,timeout)}}}};';
+}
+
+test("threaded log writes select the existing NO_THREAD fallback without starting a worker", () => {
+  for (const source of [threadedWriterFixture(), threadedWriterFixture()
+    .replaceAll('shared', '$buffer').replaceAll('pending', '$pending').replaceAll('timeout', '$delay')]) {
+    const { text, counts } = patch(source);
+    assert.equal(counts.threadedWriter, 1);
+    assert.equal(counts.wait, 0);
+    const io = vm.runInNewContext(text + ';io', {
+      SharedArrayBuffer: () => assert.fail('shared memory was allocated'),
+      Worker: () => assert.fail('a worker was started'),
+    });
+    const writer = io.writeOnAThread(1, () => assert.fail('completion callback invoked'));
+    assert.equal(writer.wait, undefined);
+    assert.throws(() => writer.write(Buffer.from('log line'), 0), { code: 'NO_THREAD' });
+  }
+});
+
+test("unknown threaded writers and unrelated nonzero waits remain rejected", () => {
+  for (const source of [
+    threadedWriterFixture().replace('SharedArrayBuffer(16)', 'SharedArrayBuffer(32)'),
+    threadedWriterFixture().replace('shared,0,pending,timeout', 'shared,1,pending,timeout'),
+    threadedWriterFixture().replace('code:"NO_THREAD"', 'code:"CHANGED"'),
+    threadedWriterFixture().replace('Error("the thread could not be started")', 'Error(message)'),
+    threadedWriterFixture().replace('new Worker("fixture")', 'startThread()'),
+    threadedWriterFixture().replace('return{write:', 'return{changed:'),
+    threadedWriterFixture().replace('wait(timeout){Atomics.wait(shared,0,pending,timeout)}', 'wait:null'),
+  ]) assert.throws(() => patch(source), /unsupported threaded log writer/);
+  assert.throws(() => patch(threadedWriterFixture() + 'Atomics.wait(other,0,pending,10)'),
+    /unsupported Atomics.wait/);
+});
+
 test("rejects every other Atomics.wait call", () => {
   for (const source of [
     "Atomics.wait(a,0,1,e)",

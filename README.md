@@ -23,6 +23,8 @@ Requires iOS 15 or later. Run `claude` in a terminal and authenticate with
 - File-system event delivery is stubbed, so settings and files are not hot-reloaded.
 - `SharedArrayBuffer` is downgraded to `ArrayBuffer`; worker-backed hooks and
   cross-thread cancellation are not supported in this first build.
+- Self-hosted runner logs use the upstream synchronous-write fallback. A
+  blocked log destination can pause the runner; keep stdout and stderr draining.
 - Claude's self-installer and updater are disabled. Upgrade through the package
   manager or a newer release from this repository.
 - macOS Keychain access is disabled on iOS. OAuth credentials, saved API keys,
