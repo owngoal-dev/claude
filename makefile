@@ -34,6 +34,7 @@ tooling:
 
 check: tooling
 	@python3 "$(ROOT_DIR)/scripts/check-launcher.py" "$(ROOT_DIR)/packaging/claude.launcher.sh"
+	@python3 "$(ROOT_DIR)/scripts/check-entrypoint.py"
 	@for script in scripts/*.sh; do bash -n "$$script" || exit 1; done
 	@node --check scripts/patch-binary.mjs
 	@node --test scripts/test-patch-source.mjs

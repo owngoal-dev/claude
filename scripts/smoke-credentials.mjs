@@ -91,16 +91,39 @@ for (const module of modules) {
 const source = modules.find((m) => m.name === context.module).contents.toString('latin1');
 const tree = parse(source, { ecmaVersion: 'latest', sourceType: 'module' });
 const code = (node) => source.slice(node.start, node.end);
+function nodes(node, predicate) {
+  if (!node || typeof node !== 'object') return [];
+  return [
+    ...(predicate(node) ? [node] : []),
+    ...Object.values(node).flatMap((value) => Array.isArray(value)
+      ? value.flatMap((child) => nodes(child, predicate)) : nodes(value, predicate)),
+  ];
+}
 const declarations = tree.body.filter((n) => n.type === 'VariableDeclaration').flatMap((n) => n.declarations);
 const disk = declarations.find((n) => n.init?.type === 'ObjectExpression' && code(n.init).includes('warning:') &&
   code(n.init).includes('readStrict(') && code(n.init).includes('.readFile('));
 assert.ok(disk);
 const write = disk.init.properties.find((p) => p.key.name === 'write');
 const writeCode = code(write.value.body);
-const atomic = /await ([\w$]+)\([\w$]+,_\([\w$]+\),384\)/.exec(writeCode);
+const atomic = /await ([\w$]+)\([\w$]+,([\w$]+)\([\w$]+\),384\)/.exec(writeCode);
 assert.ok(atomic);
 const chmod = /await ([\w$]+)\([\w$]+,384\)/.exec(writeCode);
 assert.ok(chmod);
+// Bind the extracted methods by their roles; minifier names change on every
+// upstream release. These are the actual patched read expressions.
+const method = (name) => disk.init.properties.find((p) => p.key.name === name).value;
+const read = method('read').body.body[0].block.body[0].argument;
+const reader = read.arguments[0].argument;
+const parseJSON = read.callee.name;
+const ioName = reader.callee.object.callee.name;
+const storagePath = reader.arguments[0].object.callee.name;
+const failure = method('readStrict').body.body[0].handler.body.body[0].argument.alternate.name;
+const warning = nodes(write, (n) => n.type === 'Property' && n.key?.name === 'warning')[0].value.name;
+const finalizer = write.value.body.body[0].finalizer.body[0];
+assert.equal(finalizer.type, 'IfStatement');
+const diskless = finalizer.test.callee.name;
+const invalidate = finalizer.consequent.expression.callee.name;
+const errorCode = nodes(method('remove'), (n) => n.type === 'BinaryExpression' && n.right.value === 'ENOENT')[0].left.callee.name;
 const ioSource = modules.find((m) => m.name === context.ioModule).contents.toString('latin1');
 const ioTree = parse(ioSource, { ecmaVersion: 'latest', sourceType: 'module' });
 const ioObject = ioTree.body.filter((n) => n.type === 'VariableDeclaration').flatMap((n) => n.declarations)
@@ -121,10 +144,9 @@ try {
   const sandbox = {
     // Only primitives used by the extracted file object are supplied. No
     // process, require, imports or upstream session state enters this context.
-    Y: JSON.parse, _: JSON.stringify, La: Symbol('failed'), DAr: 'plaintext',
-    E: (e) => e.code, j: () => false, Exe: () => {},
-    u: () => ({ storageDir: room, storagePath: file }),
-    ie: () => ({ ...fs, ...fs.promises, mkdir: async (p) => fs.promises.mkdir(p, { recursive: true }) }),
+    [parseJSON]: JSON.parse, [atomic[2]]: JSON.stringify, [failure]: Symbol('failed'), [warning]: 'plaintext',
+    [errorCode]: (e) => e.code, [diskless]: () => false, [invalidate]: () => {},
+    [storagePath]: () => ({ storageDir: room, storagePath: file }),
     [chmod[1]]: fs.promises.chmod,
     [atomic[1]]: async (p, data, mode) => {
       assert.equal(p, file);
@@ -135,7 +157,7 @@ try {
   };
   vm.createContext(sandbox);
   const facade = vm.runInContext(`({${forwarding.join(',')}})`, sandbox);
-  sandbox.ie = () => ({ ...fs, ...fs.promises, ...facade,
+  sandbox[ioName] = () => ({ ...fs, ...fs.promises, ...facade,
     mkdir: async (p) => fs.promises.mkdir(p, { recursive: true }) });
   vm.runInContext(`globalThis.store=${code(disk.init)};`, sandbox);
   const store = sandbox.store;
@@ -150,14 +172,30 @@ try {
   const backend = { ...store, read: () => JSON.parse(facade.readFileSync(file, { encoding: 'utf8', flag: 256 })),
     readAsync: () => store.read(), mutate: async (fn) => {
       const current = await store.readStrict();
-      if (current === sandbox.La) return { success: false };
+      if (current === sandbox[failure]) return { success: false };
       return store.write(fn(current ?? {}));
     } };
+  const save = patchedApiFunctions.find((fn) => fn.id.name === apiSave.id.name);
+  const readerFunction = patchedApiFunctions.find((fn) => fn.id.name === apiReaders[0].id.name);
+  const key = save.params[0].name;
+  const cache = save.body.body.find((n) => n.type === 'VariableDeclaration' && n.declarations[0].init?.type === 'CallExpression');
+  const hash = nodes(save, (n) => n.type === 'VariableDeclarator' && n.init?.type === 'CallExpression' && n.init.arguments[0]?.name === key)[0];
+  const awaits = nodes(save, (n) => n.type === 'AwaitExpression' && n.argument.callee?.type === 'Identifier').map((n) => n.argument);
+  const refresh = awaits.find((n) => n.arguments.length === 0);
+  const update = awaits.find((n) => n.arguments[0]?.type === 'ArrowFunctionExpression');
+  const responses = nodes(update.arguments[0], (n) => n.type === 'VariableDeclarator' && n.id.type === 'ObjectPattern')[0].init;
+  const last = save.body.body.at(-1).expression;
+  assert.equal(last.type, 'SequenceExpression');
   Object.assign(sandbox, {
     [context.selector]: () => backend,
-    on: () => false, Ni: () => ({ clear() {} }), Nk: async () => {},
-    Z$: (key) => /^[a-zA-Z0-9-_]+$/.test(key), Qde: (key) => key.slice(-20),
-    Ce: async (fn) => { config = fn(config); }, uD: () => ({ approved: [], rejected: [] }), GAr: () => {},
+    [readerFunction.body.body[0].test.callee.name]: () => false,
+    [cache.declarations[0].init.callee.name]: () => ({ clear() {} }),
+    [refresh.callee.name]: async () => {},
+    [save.body.body[0].test.argument.callee.name]: (key) => /^[a-zA-Z0-9_-]+$/.test(key),
+    [hash.init.callee.name]: (key) => key.slice(-20),
+    [update.callee.name]: async (fn) => { config = fn(config); },
+    [responses.callee.name]: () => ({ approved: [], rejected: [] }),
+    [last.expressions.at(-1).callee.name]: () => {},
   });
   for (const role of roles) {
     const fn = patchedApiFunctions.find((fn) => fn.id.name === role.id.name);
@@ -174,11 +212,11 @@ try {
   assert.equal((await store.write({ claudeAiOauth: { accessToken: 'refreshed-fixture' } })).success, true);
   assert.equal((await store.read()).claudeAiOauth.accessToken, 'refreshed-fixture');
   await fs.promises.writeFile(file, 'invalid');
-  assert.equal(await store.readStrict(), sandbox.La);
+  assert.equal(await store.readStrict(), sandbox[failure]);
   await fs.promises.unlink(file);
   await fs.promises.writeFile(path.join(room, 'target'), '{}');
   await fs.promises.symlink(path.join(room, 'target'), file);
-  assert.equal(await store.readStrict(), sandbox.La);
+  assert.equal(await store.readStrict(), sandbox[failure]);
   assert.equal(await store.remove(), true);
   assert.equal(await store.read(), null);
   console.log(`Patched upstream methods: temporary OAuth/API file read/write, API removal preserving OAuth, refresh save, 0600, corruption, symlink and delete passed (${rewrites} source edits)`);

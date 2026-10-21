@@ -103,7 +103,7 @@ for (let i = 0; i < moduleCount; i++) {
   modules.push({ name: read(nl, graphStart + no).toString(), contents: read(sl, graphStart + so) });
 }
 const credentials = credentialContext(modules);
-const totals = { bytecode: 0, sharedArrayBuffer: 0, wait: 0, credentials: 0 };
+const totals = { bytecode: 0, sharedArrayBuffer: 0, wait: 0, threadedWriter: 0, credentials: 0 };
 for (let i = 0; i < moduleCount; i++) {
   const recordAt = graphStart + modulesOffset + i * recordSize;
   const record = read(recordSize, recordAt);
@@ -128,7 +128,8 @@ for (let i = 0; i < moduleCount; i++) {
   totals.credentials += credentialEdits;
   totals.sharedArrayBuffer += counts.sharedArrayBuffer;
   totals.wait += counts.wait;
-  if (!counts.sharedArrayBuffer && !counts.wait && !credentialEdits) continue;
+  totals.threadedWriter += counts.threadedWriter;
+  if (!counts.sharedArrayBuffer && !counts.wait && !counts.threadedWriter && !credentialEdits) continue;
   if (fs.writeSync(fd, contents, 0, contents.length, graphStart + contentsOffset) !== contents.length)
     throw new Error(`module ${i} source write was short`);
   if (!read(contents.length, graphStart + contentsOffset).equals(contents))
@@ -145,4 +146,5 @@ for (let i = 0; i < moduleCount; i++) {
 if (!read(moduleCount * 4, hashesAt).equals(Buffer.alloc(moduleCount * 4))) throw new Error("source hash clear failed");
 fs.closeSync(fd);
 console.log(`patched ${moduleCount} modules; disabled ${totals.bytecode} bytecode entries; ` +
-  `SharedArrayBuffer=${totals.sharedArrayBuffer}, Atomics.wait=${totals.wait}, credentials=${totals.credentials}`);
+  `SharedArrayBuffer=${totals.sharedArrayBuffer}, Atomics.wait=${totals.wait}, ` +
+  `threadedWriter=${totals.threadedWriter}, credentials=${totals.credentials}`);

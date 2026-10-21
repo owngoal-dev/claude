@@ -28,11 +28,13 @@ xcrun clang -target "arm64-apple-ios$MIN_IOS" -isysroot "$sdk" -dynamiclib \
     -Wl,-compatibility_version,1.0 -Wl,-current_version,1.0 \
     -Wl,-reexport_library,"$sdk/usr/lib/libSystem.tbd" \
     -o "$payload/s.dylib"
+xcrun clang -target "arm64-apple-ios$MIN_IOS" -isysroot "$sdk" \
+    -O2 -Wall -Wextra -Werror "$root/packaging/claude.entrypoint.c" -o "$payload/entrypoint"
 
 grep -qE '^ *platform (IOS|2)$' < <(vtool -show-build "$payload/claude")
 [[ "$(lipo -archs "$payload/claude")" == arm64 ]]
 otool -L "$payload/claude" | grep -q '@executable_path/s.dylib'
 nm -gU "$payload/s.dylib" | grep -q ' T _FSEventStreamCreate$'
 nm -gU "$payload/s.dylib" | grep -q ' T ___clear_cache$'
-chmod 0755 "$payload/claude" "$payload/s.dylib"
+chmod 0755 "$payload/claude" "$payload/s.dylib" "$payload/entrypoint"
 echo "built Claude Code $UPSTREAM_VERSION payload ($(du -sh "$payload" | cut -f1))"

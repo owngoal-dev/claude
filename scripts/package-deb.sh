@@ -8,7 +8,7 @@ root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 source "$root/configuration/upstream.env"
 package_id="${PACKAGE_ID:-wiki.qaq.claude}"
 
-[[ -x "$payload/claude" && -f "$payload/s.dylib" ]] || { echo "error: incomplete payload" >&2; exit 66; }
+[[ -x "$payload/claude" && -x "$payload/entrypoint" && -f "$payload/s.dylib" ]] || { echo "error: incomplete payload" >&2; exit 66; }
 [[ "$architecture" == iphoneos-arm64 || "$architecture" == iphoneos-arm64e ]] || { echo "error: bad architecture" >&2; exit 64; }
 [[ "$prefix" == /var/jb || -z "$prefix" ]] || { echo "error: bad prefix" >&2; exit 64; }
 case "$architecture:$prefix" in
@@ -24,42 +24,48 @@ trap 'rm -rf -- "$staging"; rm -f -- "$temporary"' EXIT
 chmod 0755 "$staging"
 installed="$staging$prefix"
 libexec="$installed/usr/libexec/claude"
-launcher="$installed/usr/bin/claude"
+entrypoint="$installed/usr/bin/claude"
+launcher="$libexec/launcher.sh"
 docs="$installed/usr/share/doc/claude"
-mkdir -p "$staging/DEBIAN" "$libexec" "$(dirname "$launcher")" "$docs" "$(dirname "$output")"
+mkdir -p "$staging/DEBIAN" "$libexec" "$(dirname "$entrypoint")" "$docs" "$(dirname "$output")"
 mkdir -p "$installed/var/lib/claude"
 chmod 1777 "$installed/var/lib/claude"
 /usr/bin/ditto "$payload/claude" "$libexec/claude"
 /usr/bin/ditto "$payload/s.dylib" "$libexec/s.dylib"
+/usr/bin/ditto "$payload/entrypoint" "$entrypoint"
 /usr/bin/ditto "$payload/LICENSE.md" "$docs/LICENSE.md"
 /usr/bin/ditto "$payload/UPSTREAM-README.md" "$docs/README.md"
 /usr/bin/ditto "$payload/UPSTREAM-SHA256" "$docs/UPSTREAM-SHA256"
 sed -e "1s|^#!/bin/sh$|#!$prefix/bin/sh|" -e "s|@PREFIX@|$prefix|g" \
     "$root/packaging/claude.launcher.sh" >"$launcher"
-chmod 0755 "$launcher" "$libexec/claude" "$libexec/s.dylib"
+chmod 0755 "$launcher" "$entrypoint" "$libexec/claude" "$libexec/s.dylib"
 ldid -S"$root/packaging/claude.entitlements" -Cadhoc "$libexec/claude"
+ldid -S"$root/packaging/claude.entitlements" -Cadhoc "$entrypoint"
 ldid -S -Cadhoc "$libexec/s.dylib"
 
 # Inspect the signature that ships, not just its source plist.
-ldid -e "$libexec/claude" >"$staging/claude-signed.plist"
-for entitlement in platform-application com.apple.private.security.no-sandbox \
-    com.apple.private.security.storage.AppBundles \
-    com.apple.private.security.storage.AppDataContainers; do
-    [[ "$(/usr/libexec/PlistBuddy -c "Print :$entitlement" "$staging/claude-signed.plist")" == true ]] || {
-        echo "error: signed Claude is missing entitlement: $entitlement" >&2
+for binary in "$libexec/claude" "$entrypoint"; do
+    ldid -e "$binary" >"$staging/claude-signed.plist"
+    for entitlement in platform-application com.apple.private.security.no-sandbox \
+        com.apple.private.security.storage.AppBundles \
+        com.apple.private.security.storage.AppDataContainers; do
+        [[ "$(/usr/libexec/PlistBuddy -c "Print :$entitlement" "$staging/claude-signed.plist")" == true ]] || {
+            echo "error: signed Claude is missing entitlement: $entitlement" >&2
+            exit 65
+        }
+    done
+    [[ "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.private.security.container-required' "$staging/claude-signed.plist")" == false ]] || {
+        echo "error: signed Claude requires a data container" >&2
         exit 65
     }
 done
-[[ "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.private.security.container-required' "$staging/claude-signed.plist")" == false ]] || {
-    echo "error: signed Claude requires a data container" >&2
-    exit 65
-}
 rm -f "$staging/claude-signed.plist"
 
 head -n1 "$launcher" | grep -qxF "#!$prefix/bin/sh"
 grep -qF "exec $prefix/usr/libexec/claude/claude" "$launcher"
 ! grep -q '@PREFIX@' "$launcher"
 grep -qE '^ *platform (IOS|2)$' < <(vtool -show-build "$libexec/claude")
+grep -qE '^ *platform (IOS|2)$' < <(vtool -show-build "$entrypoint")
 otool -L "$libexec/claude" | grep -q '@executable_path/s.dylib'
 
 installed_size="$(du -sk "$installed" | awk '{print $1}')"
