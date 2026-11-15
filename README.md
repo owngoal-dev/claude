@@ -19,7 +19,9 @@ Requires iOS 15 or later. Run `claude` in a terminal and authenticate with
 
 ## Current compatibility
 
-- JIT is disabled; Claude runs through JavaScriptCore's interpreter.
+- JavaScriptCore's JIT runs where the jailbreak lets a process holding
+  `com.apple.private.cs.debugger` execute memory it has written; elsewhere
+  Claude stays in the interpreter. `BUN_JSC_useJIT=false` turns it off.
 - On processors older than the A13 (ARMv8.3) the ARMv8.4 instructions the
   macOS build uses are rewritten where they are hottest and emulated
   everywhere else, at about 3 µs each.

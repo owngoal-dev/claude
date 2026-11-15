@@ -12,10 +12,6 @@ void __clear_cache(void *start, void *end) {
         sys_icache_invalidate(start, last - first);
 }
 
-void pthread_jit_write_protect_np(int enabled) {
-    (void)enabled;
-}
-
 int pthread_jit_write_protect_supported_np() {
     return 1;
 }

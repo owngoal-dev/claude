@@ -48,7 +48,8 @@ for binary in "$libexec/claude" "$entrypoint"; do
     ldid -e "$binary" >"$staging/claude-signed.plist"
     for entitlement in platform-application com.apple.private.security.no-sandbox \
         com.apple.private.security.storage.AppBundles \
-        com.apple.private.security.storage.AppDataContainers; do
+        com.apple.private.security.storage.AppDataContainers \
+        com.apple.private.cs.debugger; do
         [[ "$(/usr/libexec/PlistBuddy -c "Print :$entitlement" "$staging/claude-signed.plist")" == true ]] || {
             echo "error: signed Claude is missing entitlement: $entitlement" >&2
             exit 65

@@ -24,7 +24,7 @@ node "$root/scripts/patch-ordered-loads.mjs" "$payload/claude"
 
 sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
 xcrun clang -target "arm64-apple-ios$MIN_IOS" -isysroot "$sdk" -dynamiclib -O2 \
-    "$root/shim/compat.c" "$root/shim/signals.c" "$root/shim/armv84.c" "$root/shim/illegal.c" \
+    "$root/shim/compat.c" "$root/shim/signals.c" "$root/shim/armv84.c" "$root/shim/illegal.c" "$root/shim/jit.c" \
     -framework CoreFoundation \
     -Wl,-install_name,@executable_path/s.dylib \
     -Wl,-compatibility_version,1.0 -Wl,-current_version,1.0 \
@@ -39,5 +39,7 @@ otool -L "$payload/claude" | grep -q '@executable_path/s.dylib'
 nm -gU "$payload/s.dylib" | grep -q ' T _FSEventStreamCreate$'
 nm -gU "$payload/s.dylib" | grep -q ' T ___clear_cache$'
 nm -gU "$payload/s.dylib" | grep -q ' T _sigaction$'
+nm -gU "$payload/s.dylib" | grep -q ' T _pthread_jit_write_protect_np$'
+nm -gU "$payload/s.dylib" | grep -q ' T _mmap$'
 chmod 0755 "$payload/claude" "$payload/s.dylib" "$payload/entrypoint"
 echo "built Claude Code $UPSTREAM_VERSION payload ($(du -sh "$payload" | cut -f1))"

@@ -77,7 +77,7 @@ def check(template):
                         assert exported['BROWSER'] == str(bootstrap / 'usr/bin/uiopen')
                     if program == 'claude':
                         assert exported['DISABLE_AUTOUPDATER'] == '1'
-                        assert exported['BUN_JSC_useJIT'] == 'false'
+                        assert 'BUN_JSC_useJIT' not in exported
                         credentials = bootstrap / 'var/lib/claude' / str(os.getuid())
                         assert exported['CLAUDE_SECURESTORAGE_CONFIG_DIR'] == str(credentials)
                         assert credentials.stat().st_mode & 0o777 == 0o700
