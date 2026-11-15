@@ -7,8 +7,7 @@ install | update | upgrade)
     ;;
 esac
 DISABLE_AUTOUPDATER=1
-BUN_JSC_useJIT=false
-export DISABLE_AUTOUPDATER BUN_JSC_useJIT
+export DISABLE_AUTOUPDATER
 
 # The payload uses libSystem directly. Export physical bootstrap paths so
 # subprocess lookup and TLS work outside the parent's RootHide filesystem view.

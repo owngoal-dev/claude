@@ -19,7 +19,15 @@ Requires iOS 15 or later. Run `claude` in a terminal and authenticate with
 
 ## Current compatibility
 
-- JIT is disabled; Claude runs through JavaScriptCore's interpreter.
+- JavaScriptCore's JIT runs where the jailbreak lets a process holding
+  `com.apple.private.cs.debugger` execute memory it has written; elsewhere
+  Claude stays in the interpreter. `BUN_JSC_useJIT=false` turns it off.
+- On processors older than the A13 (ARMv8.3) the ARMv8.4 instructions the
+  macOS build uses are rewritten where they are hottest and emulated
+  everywhere else, at about 3 µs each.
+- Start `claude` in a project directory. It indexes the directory it starts
+  in, and under RootHide the home directory holds a `Containers` link to
+  every app's data.
 - File-system event delivery is stubbed, so settings and files are not hot-reloaded.
 - `SharedArrayBuffer` is downgraded to `ArrayBuffer`; worker-backed hooks and
   cross-thread cancellation are not supported in this first build.
