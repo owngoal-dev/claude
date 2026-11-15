@@ -37,6 +37,8 @@ check: tooling
 	@python3 "$(ROOT_DIR)/scripts/check-entrypoint.py"
 	@for script in scripts/*.sh; do bash -n "$$script" || exit 1; done
 	@node --check scripts/patch-binary.mjs
+	@node --check scripts/patch-ordered-loads.mjs
+	@./scripts/test-armv84.sh
 	@node --test scripts/test-patch-source.mjs
 	@python3 -m json.tool docs/depiction.json >/dev/null
 	@python3 scripts/test-follow-upstream.py
